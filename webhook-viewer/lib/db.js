@@ -11,9 +11,12 @@ export async function ensureSchema() {
     CREATE TABLE IF NOT EXISTS webhook_events (
       id uuid PRIMARY KEY,
       received_at timestamptz NOT NULL,
+      token text,
       content_type text,
       user_agent text,
       payload jsonb NOT NULL
     )
   `;
+  await sql`ALTER TABLE webhook_events ADD COLUMN IF NOT EXISTS token text`;
+  await sql`CREATE INDEX IF NOT EXISTS webhook_events_token_received_at_idx ON webhook_events (token, received_at DESC)`;
 }
