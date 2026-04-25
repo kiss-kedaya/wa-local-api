@@ -19,4 +19,10 @@ export async function ensureSchema() {
   `;
   await sql`ALTER TABLE webhook_events ADD COLUMN IF NOT EXISTS token text`;
   await sql`CREATE INDEX IF NOT EXISTS webhook_events_token_received_at_idx ON webhook_events (token, received_at DESC)`;
+  await sql`CREATE INDEX IF NOT EXISTS webhook_events_received_at_idx ON webhook_events (received_at)`;
+}
+
+export async function cleanupExpiredEvents() {
+  await ensureSchema();
+  await sql`DELETE FROM webhook_events WHERE received_at < now() - interval '1 hour'`;
 }

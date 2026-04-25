@@ -1,7 +1,7 @@
-import { ensureSchema, sql } from './db';
+import { cleanupExpiredEvents, sql } from './db';
 
 export async function getRecentEvents(token, limit = 100) {
-  await ensureSchema();
+  await cleanupExpiredEvents();
 
   const rows = await sql`
     SELECT id, received_at, token, content_type, user_agent, payload

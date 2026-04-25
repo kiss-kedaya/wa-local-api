@@ -1,9 +1,9 @@
-import { ensureSchema, sql } from '@/lib/db';
+import { cleanupExpiredEvents, sql } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
 function isValidToken(token) {
-  return /^[a-zA-Z0-9_-]{16,128}$/.test(token);
+  return /^[a-zA-Z0-9_-]{6,64}$/.test(token);
 }
 
 function tokenPreview(token) {
@@ -59,7 +59,7 @@ export async function POST(request, { params }) {
       payloadKeys: payload && typeof payload === 'object' ? Object.keys(payload).slice(0, 20) : []
     });
 
-    await ensureSchema();
+    await cleanupExpiredEvents();
     await sql`
       INSERT INTO webhook_events (id, received_at, token, content_type, user_agent, payload)
       VALUES (${id}, ${receivedAt}, ${token}, ${contentType}, ${request.headers.get('user-agent')}, ${JSON.stringify(payload)}::jsonb)

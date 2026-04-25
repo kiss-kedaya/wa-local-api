@@ -3,7 +3,7 @@ import { getRecentEvents } from '@/lib/events';
 export const runtime = 'nodejs';
 
 function isValidToken(token) {
-  return /^[a-zA-Z0-9_-]{16,128}$/.test(token || '');
+  return /^[a-zA-Z0-9_-]{6,64}$/.test(token || '');
 }
 
 function tokenPreview(token) {

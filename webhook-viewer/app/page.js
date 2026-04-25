@@ -5,15 +5,23 @@ import { useEffect, useMemo, useState } from 'react';
 const TOKEN_KEY = 'notification_webhook_token';
 
 function generateToken() {
-  const bytes = new Uint8Array(32);
+  const bytes = new Uint8Array(9);
   crypto.getRandomValues(bytes);
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
+function normalizeToken(value) {
+  return value.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+}
+
+function isValidToken(value) {
+  return /^[a-zA-Z0-9_-]{6,64}$/.test(value);
+}
+
 function getTitle(event) {
   const payload = event.payload;
-  if (!payload || typeof payload !== 'object') return 'Text payload';
-  return payload.title || payload.appName || payload.packageName || payload.application || 'Notification';
+  if (!payload || typeof payload !== 'object') return '文本消息';
+  return payload.title || payload.appName || payload.packageName || payload.application || '通知';
 }
 
 function getBody(event) {
@@ -24,13 +32,12 @@ function getBody(event) {
 
 export default function Home() {
   const [token, setToken] = useState('');
+  const [tokenInput, setTokenInput] = useState('');
   const [events, setEvents] = useState([]);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [lastPollAt, setLastPollAt] = useState(null);
-  const [lastRequestId, setLastRequestId] = useState('');
-  const [lastWebhookTest, setLastWebhookTest] = useState(null);
 
   const webhookUrl = useMemo(() => {
     if (!token || typeof window === 'undefined') return '';
@@ -38,7 +45,7 @@ export default function Home() {
   }, [token]);
 
   async function loadEvents(activeToken = token, options = {}) {
-    if (!activeToken) return;
+    if (!activeToken || !isValidToken(activeToken)) return;
     if (!options.silent) setLoading(true);
     setError('');
 
@@ -47,7 +54,6 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || data.error || '读取失败');
       setEvents(data.events || []);
-      setLastRequestId(data.requestId || '');
       setLastPollAt(new Date());
     } catch (err) {
       setError(err.message);
@@ -56,13 +62,23 @@ export default function Home() {
     }
   }
 
-  function resetToken() {
-    const nextToken = generateToken();
-    localStorage.setItem(TOKEN_KEY, nextToken);
-    setToken(nextToken);
+  function saveToken(nextToken) {
+    const normalized = normalizeToken(nextToken);
+    if (!isValidToken(normalized)) {
+      setError('token 需要 6-64 位，只能包含字母、数字、下划线和短横线');
+      return;
+    }
+
+    localStorage.setItem(TOKEN_KEY, normalized);
+    setToken(normalized);
+    setTokenInput(normalized);
     setEvents([]);
     setCopied(false);
-    loadEvents(nextToken);
+    loadEvents(normalized);
+  }
+
+  function resetToken() {
+    saveToken(generateToken());
   }
 
   async function copyUrl() {
@@ -73,7 +89,6 @@ export default function Home() {
 
   async function sendTestWebhook() {
     if (!webhookUrl) return;
-    setLastWebhookTest({ status: '发送中', requestId: '' });
 
     try {
       const res = await fetch(webhookUrl, {
@@ -81,36 +96,33 @@ export default function Home() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           title: '测试通知',
-          text: '这是页面发出的测试 webhook，用来验证服务器解析和入库。',
+          text: '服务器已收到测试回调。',
           source: 'webhook-viewer-test',
           sentAt: new Date().toISOString()
         })
       });
       const data = await res.json();
-      setLastWebhookTest({
-        status: res.ok ? '成功' : '失败',
-        requestId: data.requestId || '',
-        message: data.message || data.error || ''
-      });
+      if (!res.ok) throw new Error(data.message || data.error || '测试失败');
       await loadEvents(token, { silent: true });
     } catch (err) {
-      setLastWebhookTest({ status: '失败', message: err.message, requestId: '' });
+      setError(err.message);
     }
   }
 
   useEffect(() => {
     let savedToken = localStorage.getItem(TOKEN_KEY);
-    if (!savedToken) {
+    if (!savedToken || !isValidToken(savedToken)) {
       savedToken = generateToken();
       localStorage.setItem(TOKEN_KEY, savedToken);
     }
 
     setToken(savedToken);
+    setTokenInput(savedToken);
     loadEvents(savedToken);
 
     const timer = setInterval(() => {
       loadEvents(savedToken, { silent: true });
-    }, 3000);
+    }, 5000);
 
     return () => clearInterval(timer);
   }, []);
@@ -118,47 +130,43 @@ export default function Home() {
   return (
     <main className="shell">
       <section className="hero">
-        <div>
-          <p className="eyebrow">Webhook Inbox</p>
-          <h1>通知回调查看器</h1>
-          <p className="hint">页面会在浏览器 localStorage 里保存一个随机 token，用这个 token 生成回调 URL，并每 3 秒轮询属于该 token 的消息。</p>
-        </div>
-        <button className="button" onClick={() => loadEvents()} type="button">{loading ? '刷新中' : '刷新'}</button>
+        <p className="eyebrow">Webhook Inbox</p>
+        <h1>通知回调</h1>
+        <p className="hint">复制下面的地址到 Android App。消息只保留 1 小时，页面每 5 秒自动刷新。</p>
       </section>
 
-      <section className="panel">
+      <section className="panel compactPanel">
         <label>Webhook URL</label>
         <div className="urlRow">
           <input readOnly value={webhookUrl} />
           <button onClick={copyUrl} type="button">{copied ? '已复制' : '复制'}</button>
         </div>
-        <p>把这个地址填到 Android App 的 webhook URL。不要把 token 发给别人，否则别人可以写入并查看这个 token 下的数据。</p>
-        <div className="actions">
-          <button className="linkButton" onClick={resetToken} type="button">重新生成 token</button>
-          <button className="linkButton" onClick={sendTestWebhook} type="button">发送测试回调</button>
+
+        <label className="fieldLabel">Token</label>
+        <div className="urlRow tokenRow">
+          <input value={tokenInput} onChange={event => setTokenInput(normalizeToken(event.target.value))} />
+          <button onClick={() => saveToken(tokenInput)} type="button">设置</button>
+        </div>
+
+        <div className="actions splitActions">
+          <button className="linkButton" onClick={resetToken} type="button">随机 token</button>
+          <button className="linkButton" onClick={sendTestWebhook} type="button">测试回调</button>
+          <button className="linkButton" onClick={() => loadEvents()} type="button">{loading ? '刷新中' : '刷新'}</button>
         </div>
       </section>
 
-      <section className="debugPanel">
-        <div><strong>当前 token</strong><span>{token ? `${token.slice(0, 8)}...${token.slice(-6)}` : '生成中'}</span></div>
-        <div><strong>轮询状态</strong><span>{loading ? '请求中' : '每 3 秒自动刷新'}</span></div>
-        <div><strong>最后刷新</strong><span>{lastPollAt ? lastPollAt.toLocaleString('zh-CN', { hour12: false }) : '尚未完成'}</span></div>
-        <div><strong>消息数量</strong><span>{events.length}</span></div>
-        <div><strong>查询 requestId</strong><span>{lastRequestId || '无'}</span></div>
-        <div><strong>测试回调</strong><span>{lastWebhookTest ? `${lastWebhookTest.status}${lastWebhookTest.requestId ? ` / ${lastWebhookTest.requestId}` : ''}${lastWebhookTest.message ? ` / ${lastWebhookTest.message}` : ''}` : '未发送'}</span></div>
+      <section className="statusBar">
+        <span>{events.length} 条</span>
+        <span>保留 1 小时</span>
+        <span>{lastPollAt ? lastPollAt.toLocaleTimeString('zh-CN', { hour12: false }) : '等待刷新'}</span>
       </section>
 
-      {error ? (
-        <div className="empty">
-          <h2>读取失败</h2>
-          <p>{error}</p>
-        </div>
-      ) : null}
+      {error ? <div className="empty errorBox"><p>{error}</p></div> : null}
 
       {!error && events.length === 0 ? (
         <div className="empty">
           <h2>暂无通知</h2>
-          <p>等待 Android 端 POST 到上面的 Webhook URL。</p>
+          <p>等待 Android 端 POST 到 Webhook URL。</p>
         </div>
       ) : null}
 
@@ -173,7 +181,7 @@ export default function Home() {
               <time>{new Date(event.receivedAt).toLocaleString('zh-CN', { hour12: false })}</time>
             </div>
             <details>
-              <summary>查看原始数据</summary>
+              <summary>原始数据</summary>
               <pre>{JSON.stringify(event.payload, null, 2)}</pre>
             </details>
           </article>
