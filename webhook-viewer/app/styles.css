@@ -68,7 +68,7 @@ h1 {
   text-decoration: none;
 }
 
-.empty, .card, .panel {
+.empty, .card, .panel, .debugPanel {
   border: 1px solid rgba(23, 32, 51, .08);
   border-radius: 22px;
   background: rgba(255, 255, 255, .86);
@@ -122,12 +122,43 @@ button {
   font-weight: 800;
 }
 
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
 .linkButton {
   margin-top: 14px;
   padding: 0;
   background: transparent;
   color: #4666d8;
   font-weight: 800;
+}
+
+.debugPanel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 18px;
+}
+
+.debugPanel div {
+  display: grid;
+  gap: 4px;
+}
+
+.debugPanel strong {
+  font-size: 12px;
+  color: #7a8497;
+  text-transform: uppercase;
+}
+
+.debugPanel span {
+  overflow-wrap: anywhere;
+  color: #172033;
+  font-weight: 700;
 }
 
 .empty {

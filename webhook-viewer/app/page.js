@@ -28,6 +28,9 @@ export default function Home() {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [lastPollAt, setLastPollAt] = useState(null);
+  const [lastRequestId, setLastRequestId] = useState('');
+  const [lastWebhookTest, setLastWebhookTest] = useState(null);
 
   const webhookUrl = useMemo(() => {
     if (!token || typeof window === 'undefined') return '';
@@ -42,8 +45,10 @@ export default function Home() {
     try {
       const res = await fetch(`/api/events?token=${encodeURIComponent(activeToken)}`, { cache: 'no-store' });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || '读取失败');
+      if (!res.ok) throw new Error(data.message || data.error || '读取失败');
       setEvents(data.events || []);
+      setLastRequestId(data.requestId || '');
+      setLastPollAt(new Date());
     } catch (err) {
       setError(err.message);
     } finally {
@@ -64,6 +69,33 @@ export default function Home() {
     await navigator.clipboard.writeText(webhookUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 1600);
+  }
+
+  async function sendTestWebhook() {
+    if (!webhookUrl) return;
+    setLastWebhookTest({ status: '发送中', requestId: '' });
+
+    try {
+      const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: '测试通知',
+          text: '这是页面发出的测试 webhook，用来验证服务器解析和入库。',
+          source: 'webhook-viewer-test',
+          sentAt: new Date().toISOString()
+        })
+      });
+      const data = await res.json();
+      setLastWebhookTest({
+        status: res.ok ? '成功' : '失败',
+        requestId: data.requestId || '',
+        message: data.message || data.error || ''
+      });
+      await loadEvents(token, { silent: true });
+    } catch (err) {
+      setLastWebhookTest({ status: '失败', message: err.message, requestId: '' });
+    }
   }
 
   useEffect(() => {
@@ -101,7 +133,19 @@ export default function Home() {
           <button onClick={copyUrl} type="button">{copied ? '已复制' : '复制'}</button>
         </div>
         <p>把这个地址填到 Android App 的 webhook URL。不要把 token 发给别人，否则别人可以写入并查看这个 token 下的数据。</p>
-        <button className="linkButton" onClick={resetToken} type="button">重新生成 token</button>
+        <div className="actions">
+          <button className="linkButton" onClick={resetToken} type="button">重新生成 token</button>
+          <button className="linkButton" onClick={sendTestWebhook} type="button">发送测试回调</button>
+        </div>
+      </section>
+
+      <section className="debugPanel">
+        <div><strong>当前 token</strong><span>{token ? `${token.slice(0, 8)}...${token.slice(-6)}` : '生成中'}</span></div>
+        <div><strong>轮询状态</strong><span>{loading ? '请求中' : '每 3 秒自动刷新'}</span></div>
+        <div><strong>最后刷新</strong><span>{lastPollAt ? lastPollAt.toLocaleString('zh-CN', { hour12: false }) : '尚未完成'}</span></div>
+        <div><strong>消息数量</strong><span>{events.length}</span></div>
+        <div><strong>查询 requestId</strong><span>{lastRequestId || '无'}</span></div>
+        <div><strong>测试回调</strong><span>{lastWebhookTest ? `${lastWebhookTest.status}${lastWebhookTest.requestId ? ` / ${lastWebhookTest.requestId}` : ''}${lastWebhookTest.message ? ` / ${lastWebhookTest.message}` : ''}` : '未发送'}</span></div>
       </section>
 
       {error ? (
