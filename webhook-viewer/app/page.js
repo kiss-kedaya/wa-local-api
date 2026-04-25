@@ -74,7 +74,9 @@ export default function Home() {
     setTokenInput(normalized);
     setEvents([]);
     setCopied(false);
-    loadEvents(normalized);
+    if (normalized === token) {
+      loadEvents(normalized);
+    }
   }
 
   function resetToken() {
@@ -87,28 +89,6 @@ export default function Home() {
     setTimeout(() => setCopied(false), 1600);
   }
 
-  async function sendTestWebhook() {
-    if (!webhookUrl) return;
-
-    try {
-      const res = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          title: '测试通知',
-          text: '服务器已收到测试回调。',
-          source: 'webhook-viewer-test',
-          sentAt: new Date().toISOString()
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || data.error || '测试失败');
-      await loadEvents(token, { silent: true });
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
   useEffect(() => {
     let savedToken = localStorage.getItem(TOKEN_KEY);
     if (!savedToken || !isValidToken(savedToken)) {
@@ -118,21 +98,26 @@ export default function Home() {
 
     setToken(savedToken);
     setTokenInput(savedToken);
-    loadEvents(savedToken);
+  }, []);
+
+  useEffect(() => {
+    if (!token) return undefined;
+
+    loadEvents(token);
 
     const timer = setInterval(() => {
-      loadEvents(savedToken, { silent: true });
-    }, 5000);
+      loadEvents(token, { silent: true });
+    }, 10000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [token]);
 
   return (
     <main className="shell">
       <section className="hero">
         <p className="eyebrow">Webhook Inbox</p>
         <h1>通知回调</h1>
-        <p className="hint">复制下面的地址到 Android App。消息只保留 1 小时，页面每 5 秒自动刷新。</p>
+        <p className="hint">复制下面的地址到 Android App。消息只保留 1 小时，页面每 10 秒自动刷新。</p>
       </section>
 
       <section className="panel compactPanel">
@@ -150,7 +135,6 @@ export default function Home() {
 
         <div className="actions splitActions">
           <button className="linkButton" onClick={resetToken} type="button">随机 token</button>
-          <button className="linkButton" onClick={sendTestWebhook} type="button">测试回调</button>
           <button className="linkButton" onClick={() => loadEvents()} type="button">{loading ? '刷新中' : '刷新'}</button>
         </div>
       </section>
