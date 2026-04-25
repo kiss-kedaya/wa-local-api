@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.wwebjs_auth/
+.wwebjs_cache/
+.DS_Store
+
+webhook-viewer/node_modules/
+webhook-viewer/.next/
+webhook-viewer/.env*.local
+webhook-viewer/.vercel/
