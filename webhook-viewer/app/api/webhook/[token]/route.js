@@ -70,6 +70,28 @@ export async function POST(request, { params }) {
     }
 
     await cleanupExpiredEvents();
+
+    if (payload.notificationKey) {
+      const duplicateRows = await sql`
+        SELECT id
+        FROM webhook_events
+        WHERE token = ${token}
+          AND payload->>'notificationKey' = ${String(payload.notificationKey)}
+        LIMIT 1
+      `;
+
+      if (duplicateRows.length > 0) {
+        console.log('[webhook:duplicate]', {
+          requestId,
+          token: tokenPreview(token),
+          notificationKey: payload.notificationKey,
+          existingId: duplicateRows[0].id,
+          durationMs: Date.now() - startedAt
+        });
+        return Response.json({ ok: true, ignored: true, duplicate: true, reason: 'Duplicate notificationKey', requestId });
+      }
+    }
+
     await sql`
       INSERT INTO webhook_events (id, received_at, token, content_type, user_agent, payload)
       VALUES (${id}, ${receivedAt}, ${token}, ${contentType}, ${request.headers.get('user-agent')}, ${JSON.stringify(payload)}::jsonb)
