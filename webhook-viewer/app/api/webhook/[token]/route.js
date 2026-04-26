@@ -71,12 +71,12 @@ export async function POST(request, { params }) {
 
     await cleanupExpiredEvents();
 
-    if (payload.notificationKey) {
+    if (payload.text) {
       const duplicateRows = await sql`
         SELECT id
         FROM webhook_events
         WHERE token = ${token}
-          AND payload->>'notificationKey' = ${String(payload.notificationKey)}
+          AND payload->>'text' = ${String(payload.text)}
         LIMIT 1
       `;
 
@@ -84,11 +84,11 @@ export async function POST(request, { params }) {
         console.log('[webhook:duplicate]', {
           requestId,
           token: tokenPreview(token),
-          notificationKey: payload.notificationKey,
+          text: payload.text,
           existingId: duplicateRows[0].id,
           durationMs: Date.now() - startedAt
         });
-        return Response.json({ ok: true, ignored: true, duplicate: true, reason: 'Duplicate notificationKey', requestId });
+        return Response.json({ ok: true, ignored: true, duplicate: true, reason: 'Duplicate text', requestId });
       }
     }
 
