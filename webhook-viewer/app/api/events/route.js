@@ -15,11 +15,13 @@ export async function GET(request) {
   const startedAt = Date.now();
   const { searchParams } = new URL(request.url);
   const token = searchParams.get('token');
+  const packageName = (searchParams.get('packageName') || '').trim();
   const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10), 200);
 
   console.log('[events:received]', {
     requestId,
     token: token ? tokenPreview(token) : null,
+    packageName: packageName || null,
     limit,
     userAgent: request.headers.get('user-agent') || ''
   });
@@ -30,10 +32,11 @@ export async function GET(request) {
   }
 
   try {
-    const events = await getRecentEvents(token, limit);
+    const events = await getRecentEvents(token, limit, packageName);
     console.log('[events:returned]', {
       requestId,
       token: tokenPreview(token),
+      packageName: packageName || null,
       count: events.length,
       latestReceivedAt: events[0]?.receivedAt || null,
       durationMs: Date.now() - startedAt
