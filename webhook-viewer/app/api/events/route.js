@@ -1,4 +1,4 @@
-import { getRecentEvents } from '@/lib/events';
+import { getRecentEvents, getRecentEventsByPackageName } from '@/lib/events';
 
 export const runtime = 'nodejs';
 
@@ -32,7 +32,9 @@ export async function GET(request) {
   }
 
   try {
-    const events = await getRecentEvents(token, limit, packageName);
+    const events = packageName
+      ? await getRecentEventsByPackageName(token, packageName, limit)
+      : await getRecentEvents(token, limit);
     console.log('[events:returned]', {
       requestId,
       token: tokenPreview(token),
@@ -41,7 +43,7 @@ export async function GET(request) {
       latestReceivedAt: events[0]?.receivedAt || null,
       durationMs: Date.now() - startedAt
     });
-    return Response.json({ ok: true, events, requestId });
+    return Response.json({ ok: true, events, packageName: packageName || null, requestId });
   } catch (err) {
     console.error('[events:failed]', {
       requestId,
