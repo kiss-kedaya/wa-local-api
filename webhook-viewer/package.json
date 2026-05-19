@@ -9,7 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@neondatabase/serverless": "latest",
+    "postgres": "latest",
     "next": "latest",
     "react": "latest",
     "react-dom": "latest"
