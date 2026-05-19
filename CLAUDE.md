@@ -9,7 +9,7 @@ Two independent applications:
 | Directory | Stack | Deploy target |
 |---|---|---|
 | `./` (root) | CommonJS Node.js + Express + whatsapp-web.js | Bare Linux server (systemd) |
-| `webhook-viewer/` | Next.js App Router (ESM) + Neon serverless Postgres | Vercel |
+| `webhook-viewer/` | Next.js App Router (ESM) + Neon serverless Postgres | Bare Linux server (`webhook-viewer.service` on port 3011) |
 
 ## Root — wa-local-api (`server.js`)
 
@@ -46,7 +46,9 @@ Note: `package.json` declares `"main": "index.js"` but that file doesn't exist. 
 
 ## webhook-viewer/
 
-Next.js 15 App Router project deployed on Vercel. Receives webhook POSTs from an Android app, stores them in Neon Postgres, and displays them in a browser UI.
+Next.js 15 App Router project, receives webhook POSTs from an Android app, stores them in Neon Postgres, displays them in a browser UI.
+
+Deployed to `/opt/webhook-viewer` as a systemd service (`webhook-viewer.service`), port 3011, no reverse proxy.
 
 ### Commands
 
@@ -84,16 +86,15 @@ webhook-viewer/
 ### Data flow
 
 1. Android app POSTs to `/api/webhook/<token>` with JSON body.
-2. Route validates token format, parses body, filters to `payload.title === 'GoPay'` only.
+2. Route validates token format, parses body, filters to GoPay / Gojek Indonesia (`/^(GoPay|Gojek Indonesia)$/i`).
 3. Deduplicates by `(token, payload.text)` — rejects duplicates with `{ ignored: true, duplicate: true }`.
 4. Inserts into `webhook_events` table via Neon.
 5. Frontend polls `/api/events?token=...` every 10 seconds, renders cards with title/body/raw JSON.
 6. Each ingestion and query triggers `cleanupExpiredEvents()`: deletes rows older than 1 hour plus overflow beyond 5000 rows.
-7. `vercel.json` cron hits `/api/cleanup` daily as a backup cleanup trigger.
 
 ### Key behaviors
 
-- Only GoPay notifications are stored (`payload.title !== 'GoPay'` → `ignored: true`).
+- Only GoPay / Gojek Indonesia notifications are stored (case-insensitive regex match).
 - Duplicate detection is by text content, not notificationKey.
 - Token is 12-char URL-safe base64 (9 random bytes), stored in localStorage.
 - Events auto-refresh every 10s; max 200 per query.
