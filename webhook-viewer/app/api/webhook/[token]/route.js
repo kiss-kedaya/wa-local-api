@@ -59,17 +59,18 @@ export async function POST(request, { params }) {
       payloadKeys: payload && typeof payload === 'object' ? Object.keys(payload).slice(0, 20) : []
     });
 
-    if (!payload || typeof payload !== 'object' || payload.title !== 'GoPay') {
+    await cleanupExpiredEvents();
+
+    const title = payload && typeof payload === 'object' ? String(payload.title || '') : '';
+    if (!title || !/^(GoPay|Gojek Indonesia)$/i.test(title)) {
       console.log('[webhook:ignored]', {
         requestId,
         token: tokenPreview(token),
-        title: payload && typeof payload === 'object' ? payload.title || null : null,
+        title: title || null,
         durationMs: Date.now() - startedAt
       });
-      return Response.json({ ok: true, ignored: true, reason: 'Only GoPay notifications are accepted', requestId });
+      return Response.json({ ok: true, ignored: true, reason: 'Only GoPay / Gojek Indonesia notifications are accepted', requestId });
     }
-
-    await cleanupExpiredEvents();
 
     if (payload.text) {
       const duplicateRows = await sql`

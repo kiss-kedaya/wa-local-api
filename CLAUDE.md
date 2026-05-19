@@ -2,62 +2,99 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project overview
+## Repository layout
 
-This is a small CommonJS Node.js service that exposes a local HTTP API over a WhatsApp Web session using `whatsapp-web.js`.
+Two independent applications:
 
-The full application currently lives in `server.js`. It starts an Express API on `127.0.0.1:3000`, initializes a WhatsApp Web client with `LocalAuth`, prints a terminal QR code for login, stores recent incoming messages in memory, and exposes authenticated endpoints for messages and chats.
+| Directory | Stack | Deploy target |
+|---|---|---|
+| `./` (root) | CommonJS Node.js + Express + whatsapp-web.js | Bare Linux server (systemd) |
+| `webhook-viewer/` | Next.js App Router (ESM) + Neon serverless Postgres | Vercel |
 
-## Commands
+## Root — wa-local-api (`server.js`)
 
-Install dependencies:
+A local HTTP API over a WhatsApp Web session. Single file: `server.js`.
+
+### Commands
 
 ```bash
 npm install
+API_TOKEN=your-token node server.js   # listens on 127.0.0.1:3000 by default
+npm test                               # placeholder, always fails
 ```
 
-Run locally:
+Environment variables: `API_TOKEN` (default `change-me`), `PORT` (default 3000), `HOST` (default 127.0.0.1), `CHROME_PATH` (default Chrome system install).
+
+### Runtime behavior
+
+- All routes require `x-api-key` header matching `API_TOKEN`.
+- `whatsapp-web.js` stores session in `.wwebjs_auth/` via `LocalAuth({ clientId: 'main' })`. This is machine-local state — don't modify it unless resetting login.
+- Incoming non-self messages are buffered in-memory (cap 1000), lost on restart.
+
+### Endpoints
+
+- `GET /status` — API health, WhatsApp readiness, inbox size
+- `GET /messages?limit=50` — recent messages from the in-memory buffer
+- `GET /chats` — all WhatsApp chats (id, name, isGroup, unreadCount)
+- `GET /chat/:id/messages?limit=50` — messages from a specific chat (id must be URL-encoded)
+
+### Architecture
+
+`server.js` is monolithic: Express setup → auth middleware → WhatsApp client lifecycle → route handlers → process shutdown. No separate route modules, services, or persistence.
+
+Note: `package.json` declares `"main": "index.js"` but that file doesn't exist. The entrypoint is `server.js`.
+
+## webhook-viewer/
+
+Next.js 15 App Router project deployed on Vercel. Receives webhook POSTs from an Android app, stores them in Neon Postgres, and displays them in a browser UI.
+
+### Commands
 
 ```bash
-API_TOKEN=your-token node server.js
+cd webhook-viewer
+npm install
+npm run dev      # local dev server
+npm run build    # production build
+npm run lint     # ESLint via next lint
 ```
 
-On Windows shells, set `API_TOKEN` using the shell-appropriate syntax.
+### Environment
 
-Configured test command:
+Requires `DATABASE_URL` pointing to a Neon serverless Postgres instance.
 
-```bash
-npm test
+### Source layout
+
+```
+webhook-viewer/
+  lib/
+    db.js         — neon(sql) connection, ensureSchema(), cleanupExpiredEvents()
+    events.js     — getRecentEvents(), getRecentEventsByPackageName()
+  app/
+    layout.js     — root layout (<html lang="zh-CN">)
+    page.js       — 'use client' homepage: token management, event list, polling
+    styles.css    — all styles
+    api/
+      webhook/[token]/route.js  — POST: ingest webhook; GET: info
+      events/route.js           — GET: query events by token + optional packageName
+      cleanup/route.js          — cron endpoint for Vercel scheduled cleanup
+  vercel.json     — framework: nextjs, cron: daily cleanup at midnight
+  next.config.js  — Turbopack root config only
 ```
 
-This currently fails intentionally with `Error: no test specified`. There is no project test framework, single-test command, build script, lint script, formatter config, or dev/watch script configured.
+### Data flow
 
-## Runtime behavior
+1. Android app POSTs to `/api/webhook/<token>` with JSON body.
+2. Route validates token format, parses body, filters to `payload.title === 'GoPay'` only.
+3. Deduplicates by `(token, payload.text)` — rejects duplicates with `{ ignored: true, duplicate: true }`.
+4. Inserts into `webhook_events` table via Neon.
+5. Frontend polls `/api/events?token=...` every 10 seconds, renders cards with title/body/raw JSON.
+6. Each ingestion and query triggers `cleanupExpiredEvents()`: deletes rows older than 1 hour plus overflow beyond 5000 rows.
+7. `vercel.json` cron hits `/api/cleanup` daily as a backup cleanup trigger.
 
-All API routes require the `x-api-key` header. The token comes from `process.env.API_TOKEN`; if unset, it defaults to `change-me`.
+### Key behaviors
 
-`whatsapp-web.js` stores local auth/session data in `.wwebjs_auth/` via `LocalAuth({ clientId: 'main' })`. Treat this directory as machine-local runtime state and avoid modifying it unless intentionally resetting the WhatsApp login.
-
-The in-memory inbox is capped at 1000 incoming non-self messages and is lost on process restart.
-
-## Architecture notes
-
-`server.js` combines the service layers in one file:
-
-- Express app creation and JSON middleware
-- API key auth middleware
-- in-memory message buffer
-- WhatsApp Web client configuration and lifecycle handlers
-- REST endpoints for `/messages`, `/chats`, and `/chat/:id/messages`
-- client initialization and HTTP server startup
-
-There are no route modules, service modules, persistence adapters, configuration modules, or tests yet.
-
-## Important files
-
-- `server.js` — actual app entrypoint and full implementation
-- `package.json` — package metadata, CommonJS module type, dependencies, and placeholder test script
-- `package-lock.json` — locked npm dependency tree
-- `.wwebjs_auth/` — generated WhatsApp Web session state
-
-Note: `package.json` declares `"main": "index.js"`, but no `index.js` exists; the runnable entrypoint is `server.js`.
+- Only GoPay notifications are stored (`payload.title !== 'GoPay'` → `ignored: true`).
+- Duplicate detection is by text content, not notificationKey.
+- Token is 12-char URL-safe base64 (9 random bytes), stored in localStorage.
+- Events auto-refresh every 10s; max 200 per query.
+- Schema uses `jsonb` for payload; indexes on `(token, received_at DESC)` and `received_at`.

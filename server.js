@@ -129,6 +129,9 @@ process.on('SIGTERM', shutdown);
 
 client.initialize();
 
-app.listen(3000, '127.0.0.1', () => {
-  console.log('API running: http://127.0.0.1:3000');
+const PORT = parseInt(process.env.PORT || '3000', 10);
+const HOST = process.env.HOST || '127.0.0.1';
+
+app.listen(PORT, HOST, () => {
+  console.log(`API running: http://${HOST}:${PORT}`);
 });

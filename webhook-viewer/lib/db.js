@@ -22,7 +22,30 @@ export async function ensureSchema() {
   await sql`CREATE INDEX IF NOT EXISTS webhook_events_received_at_idx ON webhook_events (received_at)`;
 }
 
+const MAX_STORED_EVENTS = 5000;
+
 export async function cleanupExpiredEvents() {
   await ensureSchema();
-  await sql`DELETE FROM webhook_events WHERE received_at < now() - interval '1 hour'`;
+
+  const expiredRows = await sql`
+    DELETE FROM webhook_events
+    WHERE received_at < now() - interval '1 hour'
+    RETURNING id
+  `;
+
+  const overflowRows = await sql`
+    DELETE FROM webhook_events
+    WHERE id IN (
+      SELECT id
+      FROM webhook_events
+      ORDER BY received_at DESC
+      OFFSET ${MAX_STORED_EVENTS}
+    )
+    RETURNING id
+  `;
+
+  return {
+    expiredDeleted: expiredRows.length,
+    overflowDeleted: overflowRows.length
+  };
 }
