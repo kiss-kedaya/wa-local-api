@@ -18,15 +18,21 @@ function isValidToken(value) {
   return /^[a-zA-Z0-9_-]{6,64}$/.test(value);
 }
 
+function normalizePayload(payload) {
+  if (!payload) return null;
+  if (typeof payload === 'object') return payload;
+  try { return JSON.parse(payload); } catch { return null; }
+}
+
 function getTitle(event) {
-  const payload = event.payload;
-  if (!payload || typeof payload !== 'object') return '文本消息';
+  const payload = normalizePayload(event.payload);
+  if (!payload) return '文本消息';
   return payload.title || payload.appName || payload.packageName || payload.application || '通知';
 }
 
 function getBody(event) {
-  const payload = event.payload;
-  if (!payload || typeof payload !== 'object') return String(payload || '');
+  const payload = normalizePayload(event.payload);
+  if (!payload) return String(event.payload || '');
   return payload.text || payload.body || payload.message || payload.content || '';
 }
 
@@ -162,7 +168,7 @@ export default function Home() {
                 <h2>{getTitle(event)}</h2>
                 <p>{getBody(event)}</p>
               </div>
-              <time>{event.payload && event.payload.postTime ? new Date(event.payload.postTime).toLocaleString('zh-CN', { hour12: false }) : new Date(event.receivedAt).toLocaleString('zh-CN', { hour12: false })}</time>
+              <time>{(() => { const p = normalizePayload(event.payload); return p && p.postTime ? new Date(p.postTime).toLocaleString('zh-CN', { hour12: false }) : new Date(event.receivedAt).toLocaleString('zh-CN', { hour12: false }); })()}</time>
             </div>
             <details>
               <summary>原始数据</summary>
