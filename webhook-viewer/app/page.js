@@ -162,7 +162,7 @@ export default function Home() {
                 <h2>{getTitle(event)}</h2>
                 <p>{getBody(event)}</p>
               </div>
-              <time>{new Date(event.receivedAt).toLocaleString('zh-CN', { hour12: false })}</time>
+              <time>{event.payload && event.payload.postTime ? new Date(event.payload.postTime).toLocaleString('zh-CN', { hour12: false }) : new Date(event.receivedAt).toLocaleString('zh-CN', { hour12: false })}</time>
             </div>
             <details>
               <summary>原始数据</summary>

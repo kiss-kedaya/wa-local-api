@@ -18,7 +18,7 @@ export async function getRecentEvents(token, limit = 100) {
     SELECT id, received_at, token, content_type, user_agent, payload
     FROM webhook_events
     WHERE token = ${token}
-    ORDER BY received_at DESC
+    ORDER BY (payload->>'postTime')::bigint DESC
     LIMIT ${limit}
   `;
 
@@ -33,7 +33,7 @@ export async function getRecentEventsByPackageName(token, packageName, limit = 1
     FROM webhook_events
     WHERE token = ${token}
       AND payload->>'packageName' = ${packageName}
-    ORDER BY received_at DESC
+    ORDER BY (payload->>'postTime')::bigint DESC
     LIMIT ${limit}
   `;
 

@@ -95,7 +95,7 @@ export async function POST(request, { params }) {
 
     await sql`
       INSERT INTO webhook_events (id, received_at, token, content_type, user_agent, payload)
-      VALUES (${id}, ${receivedAt}, ${token}, ${contentType}, ${request.headers.get('user-agent')}, ${JSON.stringify(payload)}::jsonb)
+      VALUES (${id}, ${receivedAt}, ${token}, ${contentType}, ${request.headers.get('user-agent')}, ${sql.json(payload)})
     `;
 
     console.log('[webhook:stored]', {
